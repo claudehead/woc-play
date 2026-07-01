@@ -43,6 +43,7 @@ jobs:
               popd >/dev/null
               mkdir -p "site/$V"
               cp -r src-woc/dist/* "site/$V/"
+              node scripts/inject-base-shim.mjs "site/$V/index.html"
               BUILT="$BUILT $V"
               echo "OK $V"
             else
