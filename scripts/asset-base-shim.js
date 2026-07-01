@@ -15,17 +15,31 @@
   var atRoot = (!BASE || BASE === '/');
   if (atRoot && !CDN) return;                                       // served at domain root, no CDN: nothing to do
 
-  // Top-level dirs that live in the game's source repo public/  -> served from CDN when set.
-  var SRC = /^(audio|env|guide-stills|models|textures|ui|vfx|media|fonts|icons)(\/|$)/;
+  // Raw source-repo dirs (public/<dir>/...) referenced verbatim.
+  var SRC = /^(audio|env|guide-stills|models|textures|ui|vfx|fonts|icons)(\/|$)/;
   // Vite-built code output -> always stays on Pages (never the CDN).
   var BUILT = /^(assets)(\/|$)/;
 
-  // Map a root path ("/models/x.glb") to its final URL.
+  // The build copies public/* into dist/media/ with content-hashed names
+  // (foo/bar.c69858ae1d39.webp). Strip the hash back to the logical public/ path.
+  function deHash(rest) { return rest.replace(/\.[0-9a-f]{8,}(\.[^.\/]+)$/, '$1'); }
+
+  // Map a root path ("/media/textures/x.<hash>.png" or "/audio/x.mp3") to its final URL.
   function mapRoot(p) {
     var seg = p.charAt(0) === '/' ? p.slice(1) : p;
-    if (CDN && SRC.test(seg)) return CDN + seg;                     // -> jsDelivr (absolute https)
-    if (!atRoot && (BUILT.test(seg) || SRC.test(seg))) return BASE + seg; // -> Pages version subfolder
-    return '/' + seg;                                               // leave as-is
+    if (seg.slice(0, 6) === 'media/') {                            // hashed build asset -> real public/ file
+      var logical = deHash(seg.slice(6));
+      if (CDN) return CDN + logical;                               // -> jsDelivr public/<logical>
+      if (!atRoot) return BASE + seg;                             // subfolder: the real hashed dist file
+      return '/' + seg;
+    }
+    if (SRC.test(seg)) {                                           // raw public/ passthrough
+      if (CDN) return CDN + seg;
+      if (!atRoot) return BASE + seg;
+      return '/' + seg;
+    }
+    if (BUILT.test(seg)) return atRoot ? '/' + seg : BASE + seg;   // built code -> always Pages
+    return '/' + seg;
   }
   function fixU(u) {
     if (typeof u !== 'string' || !u) return u;
@@ -33,11 +47,10 @@
     if (u.slice(0, ORIGIN.length + 1) === ORIGIN + '/') return mapRoot(u.slice(ORIGIN.length)); // same-origin absolute
     return u;
   }
-  var many = /(^|["'(=,\s])\/(audio|env|guide-stills|models|textures|ui|vfx|media|fonts|icons|assets)(\/)/g;
+  // Rewrite whole root-absolute path tokens inside CSS url()/srcset/style strings.
+  var pathRe = /\/(?:media|audio|env|guide-stills|models|textures|ui|vfx|fonts|icons|assets)\/[^"')\s,]*/g;
   function fixStr(s) {
-    return typeof s === 'string'
-      ? s.replace(many, function (m, pre, dir) { return pre + mapRoot('/' + dir + '/'); })
-      : s;
+    return typeof s === 'string' ? s.replace(pathRe, function (m) { return mapRoot(m); }) : s;
   }
 
   if (window.fetch) {
