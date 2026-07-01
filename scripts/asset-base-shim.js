@@ -3,15 +3,24 @@
 (function () {
   var BASE = location.pathname.replace(/[^/]*$/, '');
   if (!BASE || BASE === '/') return; // served at domain root: absolute paths already fine
+  var ORIGIN = location.origin;
   var one = /^\/(media|audio|ui|models|assets|fonts|icons)\//;
   var many = /(["'(=,\s]|^)\/(media|audio|ui|models|assets|fonts|icons)\//g;
-  function fixU(u) { return (typeof u === 'string' && one.test(u)) ? BASE + u.slice(1) : u; }
+  function fixU(u) {
+    if (typeof u !== 'string') return u;
+    if (one.test(u)) return BASE + u.slice(1);                       // root-relative  /media/...
+    if (u.slice(0, ORIGIN.length + 1) === ORIGIN + '/') {            // absolute same-origin  https://host/media/...
+      var pth = u.slice(ORIGIN.length);
+      if (one.test(pth)) return ORIGIN + BASE + pth.slice(1);
+    }
+    return u;
+  }
   function fixStr(s) { return typeof s === 'string' ? s.replace(many, function (m, p) { return p + BASE + m.slice(p.length + 1); }) : s; }
 
   if (window.fetch) {
     var of = window.fetch;
     window.fetch = function (i, init) {
-      try { if (typeof i === 'string') i = fixU(i); else if (i && i.url && one.test(i.url)) i = new Request(fixU(i.url), i); } catch (e) {}
+      try { if (typeof i === 'string') i = fixU(i); else if (i && typeof i.url === 'string') { var nu = fixU(i.url); if (nu !== i.url) i = new Request(nu, i); } } catch (e) {}
       return of.call(this, i, init);
     };
   }
