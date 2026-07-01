@@ -45,8 +45,9 @@ jobs:
               cp -r src-woc/dist/* "site/$V/"
               # Serve the heavy source-repo assets from jsDelivr (out of this tag), not Pages.
               node scripts/inject-base-shim.mjs "site/$V/index.html" "$V"
-              # Drop the ~180MB of assets from the Pages upload — the shim pulls them from the CDN.
-              rm -rf "site/$V"/{audio,env,guide-stills,models,textures,ui,vfx,media}
+              # Drop the ~180MB of heavy assets from the Pages upload — the shim pulls them from the CDN.
+              # Keep ui/ (2.5MB): CSS cursor: url()s resolve relative to the page, so they must stay local.
+              rm -rf "site/$V"/{audio,env,guide-stills,models,textures,vfx,media}
               BUILT="$BUILT $V"
               echo "OK $V -> $(du -sh "site/$V" | cut -f1) on Pages"
             else
