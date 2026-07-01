@@ -1,21 +1,44 @@
 /* Asset-base shim: lets a subfolder-hosted build load its root-absolute assets
-   (/media, /audio, /ui, /models, ...). Runs before the app bundle. Version-agnostic. */
+   (/models, /textures, /audio, /ui, /env, /vfx, /guide-stills, ...).
+   Runs before the app bundle. Version-agnostic.
+
+   Two modes, chosen by whether window.__WOC_ASSET_CDN__ is set (injected per build):
+     • CDN mode  — heavy source-repo assets are served from jsDelivr straight out of the
+                   game's own tag (public/...), so GitHub Pages only hosts the ~few-MB code
+                   bundle. Immutable CDN + browser cache => runs from local cache after 1st load.
+     • Subfolder — no CDN: rewrite root-absolute paths to the version subfolder on Pages. */
 (function () {
-  var BASE = location.pathname.replace(/[^/]*$/, '');
-  if (!BASE || BASE === '/') return; // served at domain root: absolute paths already fine
+  var CDN = (window.__WOC_ASSET_CDN__ || '').replace(/\/*$/, '');   // '' = off; else ends without slash
+  if (CDN) CDN += '/';
+  var BASE = location.pathname.replace(/[^/]*$/, '');                // e.g. /woc-play/v0.18.0/
   var ORIGIN = location.origin;
-  var one = /^\/(media|audio|ui|models|assets|fonts|icons)\//;
-  var many = /(["'(=,\s]|^)\/(media|audio|ui|models|assets|fonts|icons)\//g;
+  var atRoot = (!BASE || BASE === '/');
+  if (atRoot && !CDN) return;                                       // served at domain root, no CDN: nothing to do
+
+  // Top-level dirs that live in the game's source repo public/  -> served from CDN when set.
+  var SRC = /^(audio|env|guide-stills|models|textures|ui|vfx|media|fonts|icons)(\/|$)/;
+  // Vite-built code output -> always stays on Pages (never the CDN).
+  var BUILT = /^(assets)(\/|$)/;
+
+  // Map a root path ("/models/x.glb") to its final URL.
+  function mapRoot(p) {
+    var seg = p.charAt(0) === '/' ? p.slice(1) : p;
+    if (CDN && SRC.test(seg)) return CDN + seg;                     // -> jsDelivr (absolute https)
+    if (!atRoot && (BUILT.test(seg) || SRC.test(seg))) return BASE + seg; // -> Pages version subfolder
+    return '/' + seg;                                               // leave as-is
+  }
   function fixU(u) {
-    if (typeof u !== 'string') return u;
-    if (one.test(u)) return BASE + u.slice(1);                       // root-relative  /media/...
-    if (u.slice(0, ORIGIN.length + 1) === ORIGIN + '/') {            // absolute same-origin  https://host/media/...
-      var pth = u.slice(ORIGIN.length);
-      if (one.test(pth)) return ORIGIN + BASE + pth.slice(1);
-    }
+    if (typeof u !== 'string' || !u) return u;
+    if (u.charAt(0) === '/' && u.charAt(1) !== '/') return mapRoot(u);        // root-relative
+    if (u.slice(0, ORIGIN.length + 1) === ORIGIN + '/') return mapRoot(u.slice(ORIGIN.length)); // same-origin absolute
     return u;
   }
-  function fixStr(s) { return typeof s === 'string' ? s.replace(many, function (m, p) { return p + BASE + m.slice(p.length + 1); }) : s; }
+  var many = /(^|["'(=,\s])\/(audio|env|guide-stills|models|textures|ui|vfx|media|fonts|icons|assets)(\/)/g;
+  function fixStr(s) {
+    return typeof s === 'string'
+      ? s.replace(many, function (m, pre, dir) { return pre + mapRoot('/' + dir + '/'); })
+      : s;
+  }
 
   if (window.fetch) {
     var of = window.fetch;

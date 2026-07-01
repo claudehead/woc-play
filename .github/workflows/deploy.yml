@@ -6,7 +6,7 @@ on:
       versions:
         description: 'Space-separated release tags to build (newest first).'
         required: true
-        default: 'v0.18.0'
+        default: 'v0.18.0 v0.17.0 v0.16.0 v0.15.0 v0.14.1 v0.14.0 v0.13.0 v0.12.0 v0.11.0 v0.10.0 v0.9.1 v0.9.0 v0.8.0 v0.7.0 v0.6.0 v0.5.0 v0.4.0 v0.3.0'
 
 permissions:
   contents: read
@@ -43,9 +43,12 @@ jobs:
               popd >/dev/null
               mkdir -p "site/$V"
               cp -r src-woc/dist/* "site/$V/"
-              node scripts/inject-base-shim.mjs "site/$V/index.html"
+              # Serve the heavy source-repo assets from jsDelivr (out of this tag), not Pages.
+              node scripts/inject-base-shim.mjs "site/$V/index.html" "$V"
+              # Drop the ~180MB of assets from the Pages upload — the shim pulls them from the CDN.
+              rm -rf "site/$V"/{audio,env,guide-stills,models,textures,ui,vfx,media}
               BUILT="$BUILT $V"
-              echo "OK $V"
+              echo "OK $V -> $(du -sh "site/$V" | cut -f1) on Pages"
             else
               popd >/dev/null
               echo "BUILD FAILED $V — skipping"
