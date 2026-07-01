@@ -28,6 +28,9 @@
   var xo = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (m, u) { try { arguments[1] = fixU(u); } catch (e) {} return xo.apply(this, arguments); };
 
+  // new Audio('/audio/..') sets src via the constructor, bypassing the src setter
+  if (window.Audio) { var OA = window.Audio; window.Audio = function (s) { return arguments.length ? new OA(fixU(s)) : new OA(); }; window.Audio.prototype = OA.prototype; }
+
   var sa = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function (n, v) {
     try {
