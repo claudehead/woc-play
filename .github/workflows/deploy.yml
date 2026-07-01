@@ -1,0 +1,75 @@
+name: Build playable WoC versions
+
+on:
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: 'Space-separated release tags to build (newest first).'
+        required: true
+        default: 'v0.18.0'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (landing + license)
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build each version (offline client, relative base)
+        run: |
+          set +e
+          BUILT=""
+          for V in ${{ github.event.inputs.versions }}; do
+            echo "::group::Building $V"
+            rm -rf src-woc
+            git clone --depth 1 --branch "$V" https://github.com/levy-street/world-of-claudecraft src-woc || { echo "clone failed $V"; echo "::endgroup::"; continue; }
+            pushd src-woc >/dev/null
+            # host at a subfolder: make all asset URLs relative
+            sed -i "s#base: '/'#base: './'#g" vite.config.ts 2>/dev/null || true
+            if npm ci --no-audit --no-fund && npm run build; then
+              popd >/dev/null
+              mkdir -p "site/$V"
+              cp -r src-woc/dist/* "site/$V/"
+              BUILT="$BUILT $V"
+              echo "OK $V"
+            else
+              popd >/dev/null
+              echo "BUILD FAILED $V — skipping"
+            fi
+            echo "::endgroup::"
+          done
+          echo "BUILT_VERSIONS=$BUILT" >> "$GITHUB_ENV"
+          echo "Built:$BUILT"
+
+      - name: Generate landing page
+        run: node scripts/make-index.mjs "$BUILT_VERSIONS" > site/index.html
+
+      - name: Attribution + license
+        run: cp LICENSE site/LICENSE 2>/dev/null || true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
