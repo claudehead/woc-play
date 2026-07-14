@@ -7,6 +7,10 @@ on:
         description: 'Space-separated release tags to build (newest first).'
         required: true
         default: 'v0.18.0 v0.17.0 v0.16.0 v0.15.0 v0.14.1 v0.14.0 v0.13.0 v0.12.0 v0.11.0 v0.10.0 v0.9.1 v0.9.0 v0.8.0 v0.7.0 v0.6.0 v0.5.0 v0.4.0 v0.3.0'
+      wireframe_version:
+        description: 'Tag to build a wireframe variant of (the real client, white wireframe on black). Empty to skip.'
+        required: false
+        default: 'v0.23.0'
 
 permissions:
   contents: read
@@ -59,8 +63,31 @@ jobs:
           echo "BUILT_VERSIONS=$BUILT" >> "$GITHUB_ENV"
           echo "Built:$BUILT"
 
+      - name: Build wireframe variant (the real client, patched to wireframe)
+        if: ${{ github.event.inputs.wireframe_version != '' }}
+        run: |
+          set -e
+          WF="${{ github.event.inputs.wireframe_version }}"
+          echo "::group::Building wireframe from $WF"
+          rm -rf src-wf
+          git clone --depth 1 --branch "$WF" https://github.com/levy-street/world-of-claudecraft src-wf
+          node scripts/patch-wireframe.mjs src-wf
+          pushd src-wf >/dev/null
+          sed -i "s#base: '/'#base: './'#g" vite.config.ts 2>/dev/null || true
+          npm ci --no-audit --no-fund && npm run build
+          popd >/dev/null
+          rm -rf site/wireframe
+          mkdir -p site/wireframe
+          cp -r src-wf/dist/* site/wireframe/
+          # Heavy assets from jsDelivr (out of the same tag) — only the code bundle changed.
+          node scripts/inject-base-shim.mjs "site/wireframe/index.html" "$WF"
+          rm -rf site/wireframe/{audio,env,guide-stills,models,textures,vfx,media}
+          echo "WIREFRAME_TAG=$WF" >> "$GITHUB_ENV"
+          echo "wireframe ($WF) -> $(du -sh site/wireframe | cut -f1) on Pages"
+          echo "::endgroup::"
+
       - name: Generate landing page
-        run: node scripts/make-index.mjs "$BUILT_VERSIONS" > site/index.html
+        run: node scripts/make-index.mjs "$BUILT_VERSIONS" "$WIREFRAME_TAG" > site/index.html
 
       - name: Attribution + license
         run: cp LICENSE site/LICENSE 2>/dev/null || true

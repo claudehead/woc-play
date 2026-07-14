@@ -1,7 +1,9 @@
-// Landing page for the playable WoC version archive. Arg = space-separated tags built.
+// Landing page for the playable WoC version archive.
+// argv[2] = space-separated tags built. argv[3] = wireframe variant tag (optional).
 const versions = (process.argv[2] || '').trim().split(/\s+/).filter(Boolean)
   .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
 const latest = versions[0] || '';
+const wfTag = (process.argv[3] || '').trim();
 const opts = versions.map((v, i) => `<option value="${v}"${i === 0 ? ' selected' : ''}>${v}${i === 0 ? ' (latest)' : ''}</option>`).join('');
 console.log(`<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -27,6 +29,7 @@ select{padding:11px 14px;border-radius:10px;border:1px solid #6b5f45;background:
   <label style="font-family:system-ui;font-size:14px;color:#ab9f83">Version <select id="v">${opts}</select></label>
   <a class="play" id="play" href="./${latest}/">▶ Play</a>
 </div>
+${wfTag ? `<div class="row"><a class="play" style="background:#000;color:#eee4cd;border:1px solid #6b5f45;box-shadow:none" href="./wireframe/">◇ Wireframe mode <span style="opacity:.6">(${wfTag})</span></a></div>` : ''}
 <p class="note">Fan-hosted offline builds — <b>not affiliated</b> with the developer, and multiplayer is unavailable (that needs the official server). Source &amp; official game: <a href="https://github.com/levy-street/world-of-claudecraft" target="_blank" rel="noopener">levy-street/world-of-claudecraft</a> · MIT © Levy Street. Guide: <a href="https://claudehead.github.io/worldofclaudecraft-quests/" target="_blank" rel="noopener">the field guide</a>.</p>
 </div>
 <script>const s=document.getElementById('v'),a=document.getElementById('play');s.onchange=()=>a.href='./'+s.value+'/';</script>
